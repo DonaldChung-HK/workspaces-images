@@ -32,6 +32,17 @@ function cleanup_log() {
 trap notify_err ERR
 exec &> >(tee ${LOGFILE})
 
+# Ensure a D-Bus session bus is available. notify-send and zenity (used below)
+# require a session bus; when this script is launched via a Kasm Docker Exec
+# Config (first_launch) the bus address may not be exported into the process
+# environment, which makes notify-send fail with "The given address is empty".
+# Start one if it is missing so the script works regardless of how it is run.
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || ! dbus-send --session --print-reply \
+    --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.ListNames >/dev/null 2>&1; then
+  eval "$(dbus-launch --sh-syntax)"
+  export DBUS_SESSION_BUS_ADDRESS
+fi
+
 # If user input is needed for openvpn
 function get_set_creds() {
   CREDENTIALS=$(zenity --forms --title="VPN credentials" --text="Enter your VPN auth credentials" --add-entry="Username" --add-password="Password" --separator ",,,,,,")
